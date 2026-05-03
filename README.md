@@ -12,13 +12,21 @@ Outil de scouting intelligent utilisant le RAG (Retrieval-Augmented Generation) 
 ## Architecture
 
 Question utilisateur
+
 ↓
+
 Groq LLM extrait les filtres numériques
+
 ↓
+
 ChromaDB recherche par similarité vectorielle
+
 ↓
+
 Filtrage numérique sur les métadonnées
+
 ↓
+
 Groq LLM génère la réponse finale
 
 ## Stack technique
