@@ -1,3 +1,14 @@
+---
+title: RAG Scouting Sport
+emoji: 🏆
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+sdk_version: 4.0.0
+app_file: app_hf.py
+pinned: false
+---
+
 # RAG Scouting Sport
 
 Outil de scouting intelligent utilisant le RAG (Retrieval-Augmented Generation) pour répondre à des questions en langage naturel sur les statistiques de joueurs NBA et Premier League.
