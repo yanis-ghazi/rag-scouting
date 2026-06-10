@@ -1,8 +1,6 @@
+gradio==4.44.0
 sentence-transformers
 chromadb
 groq
-gradio
 python-dotenv
 pandas
-nba_api
-soccerdata
