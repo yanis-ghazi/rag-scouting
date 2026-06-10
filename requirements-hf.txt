@@ -1,0 +1,8 @@
+sentence-transformers
+chromadb
+groq
+gradio
+python-dotenv
+pandas
+nba_api
+soccerdata
