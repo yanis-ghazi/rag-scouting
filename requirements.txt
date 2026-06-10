@@ -1,0 +1,6 @@
+gradio==5.29.0
+sentence-transformers
+chromadb
+groq
+python-dotenv
+pandas
