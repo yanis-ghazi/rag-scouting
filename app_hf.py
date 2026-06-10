@@ -5,8 +5,23 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
 
 from rag_engine import init_components, ask
+from indexer import load_players, build_index
+import chromadb
 
 print("Démarrage de l'application...")
+
+# Construit l'index si il n'existe pas
+db_path = "chroma_db"
+try:
+    client = chromadb.PersistentClient(path=db_path)
+    collection = client.get_collection("players")
+    print("Index ChromaDB existant chargé !")
+except:
+    print("Index introuvable, construction en cours...")
+    players = load_players()
+    build_index(players, db_path=db_path)
+    print("Index construit !")
+
 model, collection, groq_client = init_components()
 print("Application prête !")
 
