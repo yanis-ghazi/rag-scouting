@@ -13,6 +13,8 @@ pinned: false
 
 Outil de scouting intelligent utilisant le RAG (Retrieval-Augmented Generation) pour répondre à des questions en langage naturel sur les statistiques de joueurs NBA et Premier League.
 
+Démo en ligne : https://huggingface.co/spaces/yanis-ghazi/rag-scouting
+
 ## Exemples de questions
 
 - "Quel joueur NBA sous 25 ans a le plus d'assists cette saison ?"
@@ -53,8 +55,8 @@ Groq LLM génère la réponse finale
 
 ## Données
 
-- 508 joueurs NBA — saison 2024/25 (stats par match : pts, reb, ast, stl, blk, tov, FG%, 3P%, FT%)
-- 539 joueurs Premier League — saison 2024/25 (buts, passes décisives, tirs, minutes jouées)
+- 508 joueurs NBA : saison 2024/25 (stats par match : pts, reb, ast, stl, blk, tov, FG%, 3P%, FT%)
+- 539 joueurs Premier League : saison 2024/25 (buts, passes décisives, tirs, minutes jouées)
 
 ## Installation
 
