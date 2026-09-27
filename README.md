@@ -11,57 +11,57 @@ pinned: false
 
 # RAG Scouting Sport
 
-Outil de scouting intelligent utilisant le RAG (Retrieval-Augmented Generation) pour répondre à des questions en langage naturel sur les statistiques de joueurs NBA et Premier League.
+Intelligent scouting tool using RAG (Retrieval-Augmented Generation) to answer natural-language questions about NBA and Premier League player statistics.
 
-Démo en ligne : https://huggingface.co/spaces/yanis-ghazi/rag-scouting
+Live demo: https://huggingface.co/spaces/yanis-ghazi/rag-scouting
 
-## Exemples de questions
+## Example questions
 
-- "Quel joueur NBA sous 25 ans a le plus d'assists cette saison ?"
-- "Trouve moi un meneur NBA avec plus de 8 assists et moins de 3 turnovers"
-- "Quel est le meilleur buteur de Premier League cette saison ?"
-- "Trouve moi un défenseur de PL de moins de 23 ans avec plus de 5 buts"
+- "Which NBA player under 25 has the most assists this season?"
+- "Find me an NBA point guard with more than 8 assists and fewer than 3 turnovers"
+- "Who is the top scorer in the Premier League this season?"
+- "Find me a PL defender under 23 with more than 5 goals"
 
 ## Architecture
 
-Question utilisateur
+User question
 
 ↓
 
-Groq LLM extrait les filtres numériques
+Groq LLM extracts numeric filters
 
 ↓
 
-ChromaDB recherche par similarité vectorielle
+ChromaDB retrieves by vector similarity
 
 ↓
 
-Filtrage numérique sur les métadonnées
+Numeric filtering on metadata
 
 ↓
 
-Groq LLM génère la réponse finale
+Groq LLM generates the final answer
 
-## Stack technique
+## Tech stack
 
-| Composant | Technologie |
-|-----------|-------------|
+| Component | Technology |
+|-----------|------------|
 | LLM | Groq API (Llama 3.3 70B) |
 | Embeddings | Sentence Transformers (all-MiniLM-L6-v2) |
 | Vector DB | ChromaDB |
 | Interface | Gradio |
-| Données foot | FBref via soccerdata |
-| Données basket | NBA API officielle |
+| Football data | FBref via soccerdata |
+| Basketball data | Official NBA API |
 
-## Données
+## Data
 
-- 508 joueurs NBA : saison 2024/25 (stats par match : pts, reb, ast, stl, blk, tov, FG%, 3P%, FT%)
-- 539 joueurs Premier League : saison 2024/25 (buts, passes décisives, tirs, minutes jouées)
+- 508 NBA players: 2024/25 season (per-game stats: pts, reb, ast, stl, blk, tov, FG%, 3P%, FT%)
+- 539 Premier League players: 2024/25 season (goals, assists, shots, minutes played)
 
 ## Installation
 
 ```bash
-git clone https://github.com/TON_USERNAME/rag-scouting.git
+git clone https://github.com/yanis_ghazi/rag-scouting.git
 cd rag-scouting
 
 python -m venv venv
@@ -69,7 +69,7 @@ venv\Scripts\activate
 
 pip install -r requirements.txt
 
-# Ajouter la clé API dans .env
+# Add your API key to .env
 cp .env.example .env
 
 python src/scraper.py
@@ -78,7 +78,7 @@ python src/indexer.py
 python app.py
 ```
 
-## Structure du projet
+## Project structure
 
 rag-scouting/
 ├── data/
@@ -91,8 +91,3 @@ rag-scouting/
 │   └── rag_engine.py
 ├── app.py
 ├── requirements.txt
-└── README.md
-
-## Auteur
-
-Etudiant en 4ème année d'école d'ingénieur, spécialisation data science appliquée au sport.
