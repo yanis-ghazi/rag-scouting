@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MODEL_NAME = "all-MiniLM-L6-v2"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 
 def init_components():
@@ -56,15 +56,17 @@ Réponds UNIQUEMENT avec le JSON, rien d'autre."""
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
-        max_tokens=300
+        max_tokens=2000,
+        reasoning_effort="low",
+        response_format={"type": "json_object"}
     )
 
-    raw = response.choices[0].message.content.strip()
+    raw = (response.choices[0].message.content or "").strip()
 
     try:
-        filters = json.loads(raw)
-    except json.JSONDecodeError:
-        # Si le LLM n'a pas respecté le format JSON on retourne des filtres vides
+        filters = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
+    except (ValueError, json.JSONDecodeError):
+        print("JSON invalide :", raw)
         filters = {"sport": "both", "query_text": question}
 
     return filters
