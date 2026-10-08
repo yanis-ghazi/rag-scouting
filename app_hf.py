@@ -49,7 +49,7 @@ with gr.Blocks(title="RAG Scouting Sport", theme=gr.themes.Soft()) as demo:
 
     gr.Markdown("""
     # RAG Scouting Sport
-    ### Questions en langage naturel sur les stats NBA (2024/25) et Premier League (2025/26)
+    ### Questions sur les stats NBA (2024/25) et Premier League (2025/26)
     *gpt-oss-120b (Groq) + ChromaDB + Sentence Transformers*
     """)
 
