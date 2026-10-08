@@ -49,8 +49,8 @@ with gr.Blocks(title="RAG Scouting Sport", theme=gr.themes.Soft()) as demo:
 
     gr.Markdown("""
     # RAG Scouting Sport
-    ### Questions en langage naturel sur les stats NBA et Premier League 2024/25
-    *Groq (Llama 3.3) + ChromaDB + Sentence Transformers*
+    ### Questions en langage naturel sur les stats NBA (2024/25) et Premier League (2025/26)
+    *gpt-oss-120b (Groq) + ChromaDB + Sentence Transformers*
     """)
 
     with gr.Row():
@@ -68,7 +68,7 @@ with gr.Blocks(title="RAG Scouting Sport", theme=gr.themes.Soft()) as demo:
             gr.Markdown("""
             **Données disponibles**
             - 508 joueurs NBA (2024/25)
-            - 539 joueurs Premier League (2024/25)
+            - 551 joueurs Premier League (2025/26)
             """)
 
     answer_output = gr.Markdown(value="*La réponse apparaîtra ici...*")
