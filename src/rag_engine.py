@@ -1,5 +1,8 @@
 import os
 import json
+from functools import lru_cache
+
+import numpy as np
 import chromadb
 from sentence_transformers import SentenceTransformer
 from groq import Groq
@@ -9,231 +12,205 @@ load_dotenv()
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+MAX_CANDIDATES = 15
 
+RANGE_RULES = [
+    ("pts_min", "pts", "min"),
+    ("ast_min", "ast", "min"),
+    ("ast_max", "ast", "max"),
+    ("reb_min", "reb", "min"),
+    ("tov_max", "tov", "max"),
+    ("fg3a_min", "fg3a", "min"),
+    ("goals_min", "goals", "min"),
+    ("assists_min", "assists", "min"),
+    ("age_min", "age", "min"),
+    ("age_max", "age", "max"),
+]
 
-def init_components():
-    """Initialise le modèle d'embeddings, ChromaDB et le client Groq."""
-    print("Initialisation des composants...")
+FILTER_PROMPT = """Tu extrais des critères de recherche depuis une question sur des stats sportives.
 
-    model = SentenceTransformer(MODEL_NAME)
+Question : "__Q__"
 
-    client = chromadb.PersistentClient(path="chroma_db")
-    collection = client.get_collection("players")
-
-    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-    print("✅ Composants initialisés !")
-    return model, collection, groq_client
-
-
-def extract_filters(question, groq_client):
-    """
-    Utilise Groq pour extraire les filtres numériques
-    et le sport concerné depuis la question.
-    """
-    prompt = f"""Tu es un assistant qui extrait des filtres de recherche depuis une question sur des stats sportives.
-
-Question : "{question}"
-
-Extrais les informations suivantes en JSON strict (sans markdown, sans explication) :
-{{
+Réponds uniquement avec un JSON strict :
+{
   "sport": "NBA" ou "Premier League" ou "both",
-  "age_max": nombre ou null,
+  "team": abréviation NBA (ex: "GSW", "LAL") ou nom du club de Premier League comme écrit par FBref (ex: "Arsenal", "Manchester City"), sinon null,
+    "position": "DF", "MF", "FW" ou "GK" uniquement si la question mentionne explicitement un poste (défenseur, milieu, attaquant, gardien), sinon null,
+  "sort_by": statistique à classer ("pts", "reb", "ast", "stl", "blk", "tov", "fg_pct", "fg3_pct", "ft_pct", "plus_minus", "goals", "assists", "shots", "shots_on_target" ou "age"), uniquement si la question demande explicitement un classement ou un extrême (le plus, le meilleur, le moins, top). Pour un profil ou un style de joueur (polyvalent, créatif, complet...), mets null, "sort_order": "desc" pour "le plus" ou "meilleur", "asc" pour "le moins" ou "le pire",
+  "age_max": nombre ou null (« sous N ans » signifie strictement moins de N, donc mets N-1),
   "age_min": nombre ou null,
   "pts_min": nombre ou null,
   "ast_min": nombre ou null,
   "ast_max": nombre ou null,
   "reb_min": nombre ou null,
   "tov_max": nombre ou null,
+  "fg3a_min": nombre ou null,
   "goals_min": nombre ou null,
   "assists_min": nombre ou null,
   "query_text": "reformulation courte de la question pour la recherche sémantique"
-}}
+}"""
 
-Réponds UNIQUEMENT avec le JSON, rien d'autre."""
 
+def init_components():
+    print("Initialisation des composants...")
+    model = SentenceTransformer(MODEL_NAME)
+    client = chromadb.PersistentClient(path="chroma_db")
+    collection = client.get_collection("players")
+    groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    print("Composants initialisés")
+    return model, collection, groq_client
+
+
+@lru_cache(maxsize=None)
+def load_players(sport):
+    paths = {
+        "NBA": "data/processed/nba_processed.json",
+        "Premier League": "data/processed/pl_processed.json",
+    }
+    selected = paths.keys() if sport == "both" else [sport]
+    players = []
+    for key in selected:
+        with open(paths[key], "r", encoding="utf-8") as f:
+            players += json.load(f)
+    return players
+
+
+def extract_filters(question, groq_client):
     response = groq_client.chat.completions.create(
         model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
+        messages=[{"role": "user", "content": FILTER_PROMPT.replace("__Q__", question)}],
         temperature=0,
         max_tokens=2000,
         reasoning_effort="low",
-        response_format={"type": "json_object"}
+        response_format={"type": "json_object"},
     )
-
     raw = (response.choices[0].message.content or "").strip()
-
     try:
         filters = json.loads(raw[raw.index("{"):raw.rindex("}") + 1])
     except (ValueError, json.JSONDecodeError):
         print("JSON invalide :", raw)
         filters = {"sport": "both", "query_text": question}
-
+    if filters.get("sport") not in ("NBA", "Premier League"):
+        filters["sport"] = "both"
+    filters.setdefault("query_text", question)
     return filters
 
 
-def search_players(question, model, collection, filters, n_results=10):
-    """
-    Cherche les joueurs pertinents dans ChromaDB.
-    Combine filtres metadata + recherche sémantique.
-    """
-    query_text = filters.get("query_text", question)
-    sport = filters.get("sport", "both")
-
-    # Génère l'embedding de la question
-    query_embedding = model.encode([query_text]).tolist()
-
-    # Filtre par sport si précisé
-    where_filter = None
-    if sport == "NBA":
-        where_filter = {"sport": "NBA"}
-    elif sport == "Premier League":
-        where_filter = {"sport": "Premier League"}
-
-    # Recherche dans ChromaDB
-    if where_filter:
-        results = collection.query(
-            query_embeddings=query_embedding,
-            n_results=n_results,
-            where=where_filter
-        )
-    else:
-        results = collection.query(
-            query_embeddings=query_embedding,
-            n_results=n_results
-        )
-
-    # Récupère les textes et métadonnées
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-
-    return documents, metadatas
+def has_constraints(filters):
+    keys = ["team", "position", "sort_by"] + [rule[0] for rule in RANGE_RULES]
+    return any(filters.get(k) is not None for k in keys)
 
 
-def apply_numeric_filters(documents, metadatas, filters, all_players_json):
-    """
-    Applique les filtres numériques sur les joueurs récupérés.
-    Si trop peu de résultats, élargit la recherche depuis le JSON complet.
-    """
-    sport = filters.get("sport", "both")
+def apply_filters(filters):
+    team = filters.get("team")
+    position = filters.get("position")
+    result = []
 
-    # Charge tous les joueurs pour les filtres numériques précis
-    all_players = []
-    if sport in ["NBA", "both"]:
-        with open("data/processed/nba_processed.json", "r", encoding="utf-8") as f:
-            all_players += json.load(f)
-    if sport in ["Premier League", "both"]:
-        with open("data/processed/pl_processed.json", "r", encoding="utf-8") as f:
-            all_players += json.load(f)
+    for p in load_players(filters["sport"]):
+        if team and team.lower() not in p["team"].lower():
+            continue
+        if position and position.upper() not in str(p.get("position", "")).upper():
+            continue
 
-    filtered = []
-    for p in all_players:
-        # Filtres NBA
-        if filters.get("pts_min") and p.get("pts"):
-            if p["pts"] < filters["pts_min"]:
+        valid = True
+        for key, field, kind in RANGE_RULES:
+            limit = filters.get(key)
+            if limit is None:
                 continue
-        if filters.get("ast_min") and p.get("ast"):
-            if p["ast"] < filters["ast_min"]:
-                continue
-        if filters.get("ast_max") and p.get("ast"):
-            if p["ast"] > filters["ast_max"]:
-                continue
-        if filters.get("tov_max") and p.get("tov"):
-            if p["tov"] > filters["tov_max"]:
-                continue
-        if filters.get("reb_min") and p.get("reb"):
-            if p["reb"] < filters["reb_min"]:
-                continue
+            value = p.get(field)
+            if value is None or (kind == "min" and value < limit) or (kind == "max" and value > limit):
+                valid = False
+                break
+        if valid:
+            result.append(p)
 
-        # Filtres PL
-        if filters.get("goals_min") and p.get("goals"):
-            if p["goals"] < filters["goals_min"]:
-                continue
-        if filters.get("assists_min") and p.get("assists"):
-            if p["assists"] < filters["assists_min"]:
-                continue
-
-        # Filtre age
-        if filters.get("age_max") and p.get("age"):
-            if p["age"] > filters["age_max"]:
-                continue
-        if filters.get("age_min") and p.get("age"):
-            if p["age"] < filters["age_min"]:
-                continue
-
-        filtered.append(p)
-
-    return filtered
+    return result
 
 
-def generate_answer(question, players, groq_client, filters=None):
+def rank_by_stat(players, filters):
+    sort_by = filters["sort_by"]
+    ranked = [p for p in players if p.get(sort_by) is not None]
+    ranked.sort(key=lambda p: p[sort_by], reverse=filters.get("sort_order") != "asc")
+    return ranked
+
+
+def rank_by_similarity(players, query_text, model, collection):
+    if len(players) <= 1:
+        return players
+    by_id = {p["id"]: p for p in players}
+    stored = collection.get(ids=list(by_id), include=["embeddings"])
+    embeddings = np.array(stored["embeddings"])
+    query = model.encode([query_text])[0]
+    scores = embeddings @ query / (np.linalg.norm(embeddings, axis=1) * np.linalg.norm(query) + 1e-9)
+    order = np.argsort(-scores)
+    return [by_id[stored["ids"][i]] for i in order]
+
+
+def vector_search(query_text, sport, model, collection):
+    params = {
+        "query_embeddings": model.encode([query_text]).tolist(),
+        "n_results": MAX_CANDIDATES,
+    }
+    if sport in ("NBA", "Premier League"):
+        params["where"] = {"sport": sport}
+    ids = collection.query(**params)["ids"][0]
+    by_id = {p["id"]: p for p in load_players("both")}
+    return [by_id[i] for i in ids if i in by_id]
+
+
+def retrieve(question, filters, model, collection):
+    query_text = filters["query_text"]
+    if not has_constraints(filters):
+        print("Mode : recherche vectorielle")
+        return vector_search(query_text, filters["sport"], model, collection)
+
+    candidates = apply_filters(filters)
+    if filters.get("sort_by"):
+        print("Mode : filtres + tri par statistique")
+        return rank_by_stat(candidates, filters)
+
+    print("Mode : filtres + reclassement sémantique")
+    return rank_by_similarity(candidates, query_text, model, collection)
+
+
+def generate_answer(question, players, groq_client):
     if not players:
-        return "Aucun joueur trouvé correspondant à ces critères."
+        return "Aucun joueur ne correspond à ces critères dans les données disponibles."
 
-    if filters is None:
-        filters = {}
+    players_text = "\n".join(p["text"] for p in players[:MAX_CANDIDATES])
 
-    sort_key = "pts"
-    if players and players[0].get("sport") == "Premier League":
-        if filters.get("assists_min") or "passeur" in question.lower() or "assist" in question.lower():
-            sort_key = "assists"
-        else:
-            sort_key = "goals"
-    else:
-        if filters.get("ast_min") or "assist" in question.lower() or "passe" in question.lower():
-            sort_key = "ast"
-        elif filters.get("reb_min") or "rebond" in question.lower():
-            sort_key = "reb"
-
-    players_sorted = sorted(players, key=lambda x: x.get(sort_key) or 0, reverse=True)
-    players_text = "\n".join([p["text"] for p in players_sorted[:15]])
-
-    prompt = f"""Tu es un expert scout sportif. Réponds en français à la question suivante en te basant UNIQUEMENT sur les données fournies.
+    prompt = f"""Tu es un expert scout sportif. Réponds en français à la question en te basant uniquement sur les données fournies.
 
 Question : {question}
 
-Joueurs disponibles :
+Joueurs, déjà filtrés et classés du plus pertinent au moins pertinent :
 {players_text}
 
-Instructions :
+Consignes :
 - Réponds de façon claire et structurée
-- Cite les stats précises des joueurs
-- Si plusieurs joueurs correspondent, classe-les du meilleur au moins bon
-- Si aucun joueur ne correspond parfaitement, dis-le clairement
-- Réponds en français"""
+- Cite les statistiques précises
+- Respecte l'ordre fourni pour le classement
+- Si les données ne permettent pas de répondre, dis-le clairement"""
 
     response = groq_client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
-        max_tokens=1000
+        max_tokens=2500,
+        reasoning_effort="low",
     )
-
     return response.choices[0].message.content
 
 
 def ask(question, model, collection, groq_client):
-    """
-    Fonction principale : pose une question et obtient une réponse.
-    """
-    print(f"\n🔍 Question : {question}")
-    print("Analyse en cours...")
-
-    # 1. Extraire les filtres
+    print(f"\nQuestion : {question}")
     filters = extract_filters(question, groq_client)
     print(f"Filtres détectés : {filters}")
 
-    # 2. Chercher dans ChromaDB
-    documents, metadatas = search_players(question, model, collection, filters)
+    players = retrieve(question, filters, model, collection)
+    print(f"{len(players)} joueurs retenus")
 
-    # 3. Appliquer les filtres numériques
-    filtered_players = apply_numeric_filters(documents, metadatas, filters, None)
-    print(f"{len(filtered_players)} joueurs après filtrage numérique")
-
-    # 4. Générer la réponse
-    answer = generate_answer(question, filtered_players, groq_client, filters)
-
-    return answer
+    return generate_answer(question, players, groq_client)
 
 
 if __name__ == "__main__":
@@ -242,11 +219,12 @@ if __name__ == "__main__":
     questions = [
         "Quel joueur NBA sous 25 ans a le plus d'assists cette saison ?",
         "Trouve moi un meneur NBA avec plus de 8 assists et moins de 3 turnovers",
-        "Quel est le meilleur buteur de Premier League cette saison ?",
-        "Quel est le meilleur passeur décisif de Premier League cette saison ?"
+        "Quel joueur NBA a le meilleur pourcentage à 3 points chez les GSW ?",
+        "Quel défenseur de Premier League a marqué le plus de buts ?",
+        "Quel est le meilleur passeur décisif de Premier League ?",
+        "Trouve moi un joueur NBA polyvalent qui score, passe et rebondit",
     ]
 
-    for question in questions:
-        answer = ask(question, model, collection, groq_client)
-        print(f"\n💬 Réponse :\n{answer}")
-        print("\n" + "="*60)
+    for q in questions:
+        print(f"\nRéponse :\n{ask(q, model, collection, groq_client)}")
+        print("=" * 60)

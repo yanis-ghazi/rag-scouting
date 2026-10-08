@@ -10,13 +10,14 @@ def scrape_nba_stats(season="2024-25"):
     stats = leaguedashplayerstats.LeagueDashPlayerStats(
         season=season,
         per_mode_detailed="PerGame",
-        season_type_all_star="Regular Season"
+        season_type_all_star="Regular Season",
+        timeout=120
     )
     df = stats.get_data_frames()[0]
     colonnes_utiles = [
         "PLAYER_NAME", "TEAM_ABBREVIATION", "AGE", "GP", "MIN",
         "PTS", "REB", "AST", "STL", "BLK", "TOV",
-        "FG_PCT", "FG3_PCT", "FT_PCT", "PLUS_MINUS"
+        "FG_PCT", "FG3_PCT","FG3A", "FT_PCT", "PLUS_MINUS"
     ]
     df = df[colonnes_utiles]
     df = df[df["GP"] >= 10]
